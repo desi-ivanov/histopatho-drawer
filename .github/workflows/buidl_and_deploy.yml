@@ -31,7 +31,7 @@ jobs:
         run: |
           git config --global user.name "desi-ivanov bot"
           git config --global user.email "desi-ivanov-bot@users.noreply.github.com'"
-          git clone https://github.com/desi-ivanov/histopatho-drawer --depth 1 --branch gh-pages gh-pages
+          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/desi-ivanov/histopatho-drawer --depth 1 --branch gh-pages gh-pages
           cd gh-pages
           git rm -rf .
           cp -r ../dist/* .
