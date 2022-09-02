@@ -28,9 +28,11 @@ class Drawer {
   static types = ["pen", "eraser", "bucket"] as DrawMode[];
   static get colors() {
     return [
-      [255, 0, 0],
-      [0, 128, 0],
       [0, 0, 255],
+      [0, 125, 0],
+      [255, 0, 0],
+      [0, 191, 191],
+      [191, 0, 191],
       [255, 255, 255],
     ]
   }
@@ -261,6 +263,7 @@ function App() {
         <button onClick={handleLoad}>Load</button>
         <button onClick={handleGenerate}>Generate</button>
       </div>
+      <Legend />
     </div>
   );
 }
@@ -365,5 +368,26 @@ const ColorPicker = ({
     </div>
   );
 };
+
+const Legend = () => {
+  return <div style={{ flexDirection: "column", display: "flex", gap: 5, marginTop: 20 }}>
+    <strong>LEGEND</strong>
+    {[
+      { color: "rgb(0, 0, 255)", label: "Neoplastic cells" },
+      { color: "rgb(0, 125, 0)", label: "Inflammatory" },
+      { color: "rgb(255, 0, 0)", label: "Connective/Soft tissue cells" },
+      { color: "rgb(0, 191, 191)", label: "Dead Cells" },
+      { color: "rgb(191, 0, 191)", label: "Epithelial" },
+      { color: "rgb(255, 255, 255)", label: "Don't care" },
+      
+      
+      
+    ].map(({ color, label }) => <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+      <div style={{ width: 20, height: 20, backgroundColor: color }} />
+      <div>{label}</div>
+    </div>)}
+
+  </div>
+}
 
 export default App;
