@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 // const SERVER = "https://5qpc5nz4-8080.euw.rel.tunnels.api.visualstudio.com/example";
 // const SERVER = "http://localhost:8080"
-const SERVER = "http://hssh2.di.unito.it:45123"
+const SERVER = "https://crypto.desislav.dev"
 
 const IMAGE_SIZE = 512;
 type DrawMode = "pen" | "eraser" | "bucket";
