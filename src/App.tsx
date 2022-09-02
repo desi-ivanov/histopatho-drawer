@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+// const SERVER = "https://5qpc5nz4-8080.euw.rel.tunnels.api.visualstudio.com/example";
+// const SERVER = "http://localhost:8080"
+const SERVER = "http://hssh2.di.unito.it:45123"
+
 const IMAGE_SIZE = 512;
 type DrawMode = "pen" | "eraser" | "bucket";
 class Drawer {
@@ -207,7 +211,7 @@ function App() {
       const canvas = canvasRef.current;
       if(canvas) {
         const data = canvas.toDataURL("image/png");
-        fetch("http://localhost:8080/infer", {
+        fetch(`${SERVER}/infer`, {
           method: "POST",
           body: JSON.stringify({ img: data }),
           headers: { "content-type": "application/json" }
@@ -218,7 +222,7 @@ function App() {
   }
   const handleClear = () => drawerRef.current?.clear()
   const handleLoad = () => {
-    fetch("http://localhost:8080/example")
+    fetch(`${SERVER}/example`)
       .then(r => r.json())
       .then(res => {
         setResultSrc(res.reconstructed)
