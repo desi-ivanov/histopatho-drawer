@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LinearProgress } from "./LinearProgress";
 // const SERVER = "http://localhost:45624"
 const SERVER = "https://crypto.desislav.dev:45123"
 
@@ -22,7 +23,7 @@ class Drawer {
     this.size = 5;
     this.type = "pen";
   }
-  static initialColor = [255, 0, 0, 255];
+  static initialColor = [0, 0, 255];
   static sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   static types = ["pen", "eraser", "bucket"] as DrawMode[];
   static get colors() {
@@ -82,7 +83,7 @@ class Drawer {
     imageData.data[index] = color[0];
     imageData.data[index + 1] = color[1];
     imageData.data[index + 2] = color[2];
-    imageData.data[index + 3] = color[3];
+    imageData.data[index + 3] = 1;
   }
   public bucketFill = (sx: number, sy: number) => {
     const imageData = this.ctx.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE);
@@ -167,13 +168,42 @@ class Drawer {
   }
 }
 
+const withLoading = (setLoading: (loading: boolean) => void) => {
+  return function <T>(p: Promise<T>): Promise<T> {
+    setLoading(true);
+    return p.finally(() => setLoading(false));
+  }
+}
+
+function withCooldown<T extends any[], U>(f: (...args: T) => Promise<U>, cooldown: number): (...args: T) => Promise<U> {
+  let last = 0;
+  return (...args: T) => {
+    const now = Date.now();
+    if(now - last < cooldown) {
+      return Promise.reject(`Please lower your request rate! Retry in ${(cooldown / 1000).toFixed(2)} seconds`);
+    }
+    last = now;
+    return f(...args);
+  }
+}
+
+const example = withCooldown(() => fetch(`${SERVER}/example`).then(r => r.json()), 300)
+const infer = withCooldown((img: any) => {
+  return fetch(`${SERVER}/infer`, {
+    method: "POST",
+    body: JSON.stringify({ img }),
+    headers: { "content-type": "application/json" }
+  }).then(r => r.json())
+}, 300)
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawerRef = useRef<Drawer | null>(null);
   const [real, setReal] = useState<{ src: string, label: string, predicted: string, predicted_proba: number } | undefined>(undefined)
   const [reconstructed, setReconstructed] = useState<{ src: string, predicted: string, predicted_proba: number } | undefined>(undefined)
-
-
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const callWrapper = withLoading(setLoading);
   useEffect(() => {
     if(canvasRef.current) {
       canvasRef.current.width = IMAGE_SIZE;
@@ -193,6 +223,7 @@ function App() {
         }
         const mouseUp = () => {
           drawer.mouseUp();
+          handleGenerate();
         }
 
         canvasRef.current.addEventListener("mousedown", mouseDown);
@@ -216,26 +247,23 @@ function App() {
       const canvas = canvasRef.current;
       if(canvas) {
         const data = canvas.toDataURL("image/png");
-        fetch(`${SERVER}/infer`, {
-          method: "POST",
-          body: JSON.stringify({ img: data }),
-          headers: { "content-type": "application/json" }
-        }).then(r => r.json())
+        setError(null);
+        callWrapper(infer(data))
           .then(res => {
             setReconstructed({ src: res.img, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
-          });
+          }).catch(err => setError(String(err)));
       }
     }
   }
   const handleClear = () => drawerRef.current?.clear()
   const handleLoad = () => {
-    fetch(`${SERVER}/example`)
-      .then(r => r.json())
+    setError(null);
+    callWrapper(example())
       .then(res => {
         setReal({ src: res.real, label: idx2cls[res.label], predicted: idx2cls[res.real_pred_label], predicted_proba: res.real_pred_proba })
         setReconstructed({ src: res.reconstructed, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
         drawerRef.current?.load(res.segmented)
-      });
+      }).catch(err => setError(String(err)));
   }
   return (
     <div
@@ -266,23 +294,25 @@ function App() {
         <div style={{ display: "flex", gap: 10, flexDirection: "column" }}>
           <div>Reconstructed</div>
           <img width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} src={reconstructed?.src}></img>
-          {reconstructed && <div>Predicted: {reconstructed.predicted} {(reconstructed.predicted_proba*100).toFixed(1)}%</div>}
+          {reconstructed && <div>Predicted: {reconstructed.predicted} {(reconstructed.predicted_proba * 100).toFixed(1)}%</div>}
         </div>
-        <div style={{ display: "flex", gap: 5, flexDirection: "column" }}>
+        <div style={{ display: "flex", gap: 10, flexDirection: "column" }}>
           <div>Real</div>
           <img width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} src={real?.src}></img>
           {real &&
             <>
-              <div>Predicted: {real.predicted} {(real.predicted_proba*100).toFixed(1)}%;{"    "}Real label: {real.label}</div>
+              <div>Predicted: {real.predicted} {(real.predicted_proba * 100).toFixed(1)}%;{"    "}Real label: {real.label}</div>
             </>
           }
         </div>
       </div>
       <div style={{ display: "flex", flexDirection: "row", gap: 10 }}>
         <button onClick={handleClear}>Clear</button>
-        <button onClick={handleLoad}>Load</button>
+        <button onClick={handleLoad}>Load Random</button>
         <button onClick={handleGenerate}>Generate</button>
       </div>
+      {loading && <LinearProgress />}
+      {error && <div style={{ color: "red" }}>{error}</div>}
       <Legend />
     </div>
   );
