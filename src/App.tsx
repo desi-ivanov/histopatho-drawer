@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-// const SERVER = "https://5qpc5nz4-8080.euw.rel.tunnels.api.visualstudio.com/example";
-// const SERVER = "http://localhost:8080"
+// const SERVER = "http://localhost:45624"
 const SERVER = "https://crypto.desislav.dev"
 
 const IMAGE_SIZE = 512;
@@ -171,8 +170,10 @@ class Drawer {
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawerRef = useRef<Drawer | null>(null);
-  const [resultSrc, setResultSrc] = useState<string>("");
-  const [realSrc, setRealSrc] = useState<string>("");
+  const [real, setReal] = useState<{ src: string, label: string, predicted: string, predicted_proba: number } | undefined>(undefined)
+  const [reconstructed, setReconstructed] = useState<{ src: string, predicted: string, predicted_proba: number } | undefined>(undefined)
+
+
   useEffect(() => {
     if(canvasRef.current) {
       canvasRef.current.width = IMAGE_SIZE;
@@ -208,6 +209,8 @@ function App() {
   }, []);
 
 
+  const idx2cls: Record<number, string> = { 0: "HG", 1: "LG" }
+
   const handleGenerate = () => {
     if(drawerRef.current) {
       const canvas = canvasRef.current;
@@ -218,7 +221,9 @@ function App() {
           body: JSON.stringify({ img: data }),
           headers: { "content-type": "application/json" }
         }).then(r => r.json())
-          .then(res => setResultSrc(res.img));
+          .then(res => {
+            setReconstructed({ src: res.img, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
+          });
       }
     }
   }
@@ -227,8 +232,8 @@ function App() {
     fetch(`${SERVER}/example`)
       .then(r => r.json())
       .then(res => {
-        setResultSrc(res.reconstructed)
-        setRealSrc(res.real)
+        setReal({ src: res.real, label: idx2cls[res.label], predicted: idx2cls[res.real_pred_label], predicted_proba: res.real_pred_proba })
+        setReconstructed({ src: res.reconstructed, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
         drawerRef.current?.load(res.segmented)
       });
   }
@@ -254,9 +259,24 @@ function App() {
         </div>
       </div>
       <div style={{ display: "flex", gap: 10 }}>
-        <canvas width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} ref={canvasRef}></canvas>
-        <img width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} src={resultSrc}></img>
-        <img width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} src={realSrc}></img>
+        <div style={{ display: "flex", gap: 10, flexDirection: "column" }}>
+          <div>Segmentation</div>
+          <canvas width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} ref={canvasRef}></canvas>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexDirection: "column" }}>
+          <div>Reconstructed</div>
+          <img width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} src={reconstructed?.src}></img>
+          {reconstructed && <div>Predicted: {reconstructed.predicted} {(reconstructed.predicted_proba*100).toFixed(1)}%</div>}
+        </div>
+        <div style={{ display: "flex", gap: 5, flexDirection: "column" }}>
+          <div>Real</div>
+          <img width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} src={real?.src}></img>
+          {real &&
+            <>
+              <div>Predicted: {real.predicted} {(real.predicted_proba*100).toFixed(1)}%;{"    "}Real label: {real.label}</div>
+            </>
+          }
+        </div>
       </div>
       <div style={{ display: "flex", flexDirection: "row", gap: 10 }}>
         <button onClick={handleClear}>Clear</button>
@@ -379,9 +399,9 @@ const Legend = () => {
       { color: "rgb(0, 191, 191)", label: "Dead Cells" },
       { color: "rgb(191, 0, 191)", label: "Epithelial" },
       { color: "rgb(255, 255, 255)", label: "Don't care" },
-      
-      
-      
+
+
+
     ].map(({ color, label }) => <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
       <div style={{ width: 20, height: 20, backgroundColor: color }} />
       <div>{label}</div>
