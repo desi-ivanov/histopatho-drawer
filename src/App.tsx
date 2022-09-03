@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 // const SERVER = "http://localhost:45624"
-const SERVER = "https://crypto.desislav.dev"
+const SERVER = "https://crypto.desislav.dev:45123"
 
 const IMAGE_SIZE = 512;
 type DrawMode = "pen" | "eraser" | "bucket";
