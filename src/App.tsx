@@ -311,7 +311,10 @@ function App() {
         <button onClick={handleLoad}>Load Random</button>
         <button onClick={handleGenerate}>Generate</button>
       </div>
-      {loading && <LinearProgress />}
+      {loading && <div>
+        <LinearProgress />
+        <div>Please note that the first request might take more than 30 seconds due to the cold start of the server.</div>
+      </div>}
       {error && <div style={{ color: "red" }}>{error}</div>}
       <Legend />
     </div>
