@@ -83,7 +83,7 @@ class Drawer {
     imageData.data[index] = color[0];
     imageData.data[index + 1] = color[1];
     imageData.data[index + 2] = color[2];
-    imageData.data[index + 3] = 1;
+    imageData.data[index + 3] = 255;
   }
   public bucketFill = (sx: number, sy: number) => {
     const imageData = this.ctx.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE);
