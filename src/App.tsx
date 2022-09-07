@@ -374,7 +374,8 @@ const ModePicker = ({
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
-            fontSize: 20
+            fontSize: 24,
+            fontFamily: "Noto Color Emoji, Helvetica, Arial, sans-serif",
           }}
         >
           {EmojiMap[mode]}

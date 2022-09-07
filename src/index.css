@@ -17,3 +17,7 @@
 body {
   margin: 0;
 }
+@font-face {
+  font-family: 'Noto Color Emoji';
+  src: url(https://raw.githack.com/googlefonts/noto-emoji/main/fonts/NotoColorEmoji.ttf);
+}
