@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LinearProgress } from "./LinearProgress";
 // const SERVER = "http://localhost:45624"
 const SERVER = "https://crypto.desislav.dev:45123"
@@ -29,7 +29,7 @@ class Drawer {
   static get colors() {
     return [
       [0, 0, 255],
-      [0, 125, 0],
+      [0, 128, 0],
       [255, 0, 0],
       [0, 191, 191],
       [191, 0, 191],
@@ -187,22 +187,42 @@ function withCooldown<T extends any[], U>(f: (...args: T) => Promise<U>, cooldow
   }
 }
 
-const example = withCooldown(() => fetch(`${SERVER}/example`).then(r => r.json()), 300)
-const infer = withCooldown((img: any) => {
+const example = withCooldown((z: number[]) => fetch(`${SERVER}/example`, {
+  method: "POST",
+  body: JSON.stringify({ z }),
+  headers: { "content-type": "application/json" }
+}).then(r => r.json()), 300);
+
+const infer = withCooldown((img: any, z: number[]) => {
   return fetch(`${SERVER}/infer`, {
     method: "POST",
-    body: JSON.stringify({ img }),
+    body: JSON.stringify({ img, z }),
     headers: { "content-type": "application/json" }
   }).then(r => r.json())
 }, 300)
 
+const interpolation = (z1: number[], z2: number[], steps: number) => {
+  const result = [];
+  for(let i = 0; i < steps; i++) {
+    const t = i / (steps - 1);
+    const z = z1.map((v, i) => v * (1 - t) + z2[i] * t);
+    result.push(z);
+  }
+  return result;
+}
+
+const randn = (mu: number, sigma: number) =>
+  Math.sqrt(-2.0 * Math.log(Math.random())) * Math.cos(2.0 * Math.PI * Math.random()) * sigma + mu;
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawerRef = useRef<Drawer | null>(null);
-  const [real, setReal] = useState<{ src: string, label: string, predicted: string, predicted_proba: number } | undefined>(undefined)
-  const [reconstructed, setReconstructed] = useState<{ src: string, predicted: string, predicted_proba: number } | undefined>(undefined)
+  const [real, setReal] = useState<{ src: string, label?: string, predicted?: string, predicted_proba?: number } | undefined>(undefined)
+  const [reconstructed, setReconstructed] = useState<{ src: string, predicted?: string, predicted_proba?: number } | undefined>(undefined)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [z, setZ] = useState<number[]>(Array.from({ length: 512 }, () => randn(0, 1)));
+
   const callWrapper = withLoading(setLoading);
   useEffect(() => {
     if(canvasRef.current) {
@@ -242,13 +262,19 @@ function App() {
 
   const idx2cls: Record<number, string> = { 0: "HG", 1: "LG" }
 
-  const handleGenerate = () => {
+  const handleRandomVector = () => {
+    const nz = z.map(() => randn(0, 1))
+    setZ(nz);
+    handleGenerate(nz);
+  }
+
+  const handleGenerate = (nz?: number[]) => {
     if(drawerRef.current) {
       const canvas = canvasRef.current;
       if(canvas) {
         const data = canvas.toDataURL("image/png");
         setError(null);
-        callWrapper(infer(data))
+        return callWrapper(infer(data, nz ?? z))
           .then(res => {
             setReconstructed({ src: res.img, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
           }).catch(err => setError(String(err)));
@@ -258,65 +284,89 @@ function App() {
   const handleClear = () => drawerRef.current?.clear()
   const handleLoad = () => {
     setError(null);
-    callWrapper(example())
+    callWrapper(example(z))
       .then(res => {
         setReal({ src: res.real, label: idx2cls[res.label], predicted: idx2cls[res.real_pred_label], predicted_proba: res.real_pred_proba })
         setReconstructed({ src: res.reconstructed, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
         drawerRef.current?.load(res.segmented)
       }).catch(err => setError(String(err)));
   }
+
+  const runInterpolation = useMemo(() => withCooldown(async (z: number[]) => {
+    const zs = interpolation(z, Array.from({ length: 512 }, () => randn(0, 1)), 10);
+    for(const z of zs) {
+      setZ(z);
+      await handleGenerate(z);
+    }
+  }, 300), []);
+
+  const interpolate = () => runInterpolation(z).catch(err => setError(String(err)));
+
   return (
     <div
       style={{ display: "flex", gap: 10, flexDirection: "column", padding: 10 }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <ColorPicker
-          onChange={(color) => drawerRef.current?.setColor(color)}
-          colors={Drawer.colors}
-          initial={Drawer.initialColor}
-        />
-        <div style={{ display: "flex", flexDirection: "row", gap: 10 }}>
-          <ModePicker
-            onChange={(mode) => drawerRef.current?.setType(mode)}
-            modes={Drawer.types}
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <ColorPicker
+            onChange={(color) => drawerRef.current?.setColor(color)}
+            colors={Drawer.colors}
+            initial={Drawer.initialColor}
           />
-          <SizePicker
-            onChange={(size) => drawerRef.current?.setSize(size)}
-            sizes={Drawer.sizes}
-          />
+          <div style={{ display: "flex", flexDirection: "row", gap: 10 }}>
+            <ModePicker
+              onChange={(mode) => drawerRef.current?.setType(mode)}
+              modes={Drawer.types}
+            />
+            <SizePicker
+              onChange={(size) => drawerRef.current?.setSize(size)}
+              sizes={Drawer.sizes}
+            />
+          </div>
         </div>
+        <Legend />
       </div>
       <div style={{ display: "flex", gap: 10 }}>
         <div style={{ display: "flex", gap: 10, flexDirection: "column" }}>
           <div>Segmentation</div>
           <canvas width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} ref={canvasRef}></canvas>
+          <div>
+            <div style={{ display: "flex", flexDirection: "row", gap: 10 }}>
+              <button onClick={handleClear}>Clear</button>
+              <button onClick={handleLoad}>Load Random</button>
+              <button onClick={() => handleGenerate()}>Generate</button>
+            </div>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 10, flexDirection: "column" }}>
           <div>Reconstructed</div>
           <img width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} src={reconstructed?.src}></img>
-          {reconstructed && <div>Predicted: {reconstructed.predicted} {(reconstructed.predicted_proba * 100).toFixed(1)}%</div>}
+          {reconstructed && reconstructed.predicted && reconstructed.predicted_proba && <div>Predicted: {reconstructed.predicted} {(reconstructed.predicted_proba * 100).toFixed(1)}%</div>}
         </div>
         <div style={{ display: "flex", gap: 10, flexDirection: "column" }}>
           <div>Real</div>
           <img width={IMAGE_SIZE} height={IMAGE_SIZE} style={{ width: IMAGE_SIZE, height: IMAGE_SIZE }} src={real?.src}></img>
-          {real &&
+          {real && real.predicted_proba &&
             <>
               <div>Predicted: {real.predicted} {(real.predicted_proba * 100).toFixed(1)}%;{"    "}Real label: {real.label}</div>
             </>
           }
         </div>
       </div>
-      <div style={{ display: "flex", flexDirection: "row", gap: 10 }}>
-        <button onClick={handleClear}>Clear</button>
-        <button onClick={handleLoad}>Load Random</button>
-        <button onClick={handleGenerate}>Generate</button>
+      {error && <div style={{ color: "red" }}>{error}</div>}
+      Latent vector:
+      <div style={{ display: "flex", flexWrap: "wrap", width: IMAGE_SIZE }}>
+        {Array.from({ length: z.length / 3 })
+          .map((_, i) => <div style={{ backgroundColor: torgb([z[i * 3], z[i * 3 + 1], z[i * 3 + 2]]), width: 15, height: 15, padding: 0, borderWidth: 0, border: "none", borderStyle: "none" }} />)}
+      </div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <button onClick={handleRandomVector}>Random</button>
+        <button onClick={interpolate}>Interpolate to random</button>
       </div>
       {loading && <div>
         <LinearProgress />
         <div>Please note that the first request might take more than 30 seconds due to the cold start of the server.</div>
       </div>}
-      {error && <div style={{ color: "red" }}>{error}</div>}
-      <Legend />
     </div>
   );
 }
@@ -422,24 +472,27 @@ const ColorPicker = ({
     </div>
   );
 };
-
+const norm2rgb = (n: number) => Math.floor((n + 2) / 4 * 255).toString(16);
+const torgb = (c: number[]) => `#${norm2rgb(c[0])}${norm2rgb(c[1])}${norm2rgb(c[2])}`;
 const Legend = () => {
-  return <div style={{ flexDirection: "column", display: "flex", gap: 5, marginTop: 20 }}>
+  return <div style={{ flexDirection: "column", display: "flex", gap: 5 }}>
     <strong>LEGEND</strong>
-    {[
-      { color: "rgb(0, 0, 255)", label: "Neoplastic cells" },
-      { color: "rgb(0, 125, 0)", label: "Inflammatory" },
-      { color: "rgb(255, 0, 0)", label: "Connective/Soft tissue cells" },
-      { color: "rgb(0, 191, 191)", label: "Dead Cells" },
-      { color: "rgb(191, 0, 191)", label: "Epithelial" },
-      { color: "rgb(255, 255, 255)", label: "Don't care" },
+    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", width: 400 }}>
+      {[
+        { color: "rgb(0, 0, 255)", label: "Neoplastic" },
+        { color: "rgb(0, 128, 0)", label: "Inflammatory" },
+        { color: "rgb(255, 0, 0)", label: "Connective" },
+        { color: "rgb(0, 191, 191)", label: "Dead" },
+        { color: "rgb(191, 0, 191)", label: "Epithelial" },
+        { color: "rgb(255, 255, 255)", label: "Don't care" },
 
 
 
-    ].map(({ color, label }) => <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-      <div style={{ width: 20, height: 20, backgroundColor: color }} />
-      <div>{label}</div>
-    </div>)}
+      ].map(({ color, label }) => <div style={{ display: "flex", gap: 5, alignItems: "center",flex: 1 }}>
+        <div style={{ width: 20, height: 20, backgroundColor: color }} />
+        <div>{label}</div>
+      </div>)}
+    </div>
 
   </div>
 }
