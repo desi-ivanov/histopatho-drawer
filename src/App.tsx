@@ -187,19 +187,37 @@ function withCooldown<T extends any[], U>(f: (...args: T) => Promise<U>, cooldow
   }
 }
 
-const example = withCooldown((z: number[]) => fetch(`${SERVER}`, {
-  method: "POST",
-  body: JSON.stringify({ z, action: "example", }),
-  headers: { "content-type": "application/json" }
-}).then(r => r.json()), 300);
 
-const infer = withCooldown((img: any, z: number[]) => {
-  return fetch(SERVER, {
+type ApiCalls = {
+  example: {
+    request: { z?: number[] }, response: {
+      segmented: string
+      reconstructed: string
+      real: string
+      rec_pred_proba: number
+      rec_pred_label: number
+      real_pred_proba: number
+      real_pred_label: number
+      label: number
+      z: number[]
+    }
+  }
+  infer: {
+    request: { z?: number[], img: string }, response: {
+      img: string
+      rec_pred_proba: number
+      rec_pred_label: number
+    }
+  }
+}
+
+const apiCall = withCooldown(function apiCall<T extends "example" | "infer">(args: { action: T } & ApiCalls[T]["request"]): Promise<{ error: string } | ApiCalls[T]["response"]> {
+  return fetch(`${SERVER}`, {
     method: "POST",
-    body: JSON.stringify({ action: "infer", img, z }),
+    body: JSON.stringify(args),
     headers: { "content-type": "application/json" }
   }).then(r => r.json())
-}, 300)
+}, 300);
 
 const interpolation = (z1: number[], z2: number[], steps: number) => {
   const result = [];
@@ -223,7 +241,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [z, setZ] = useState<number[]>(Array.from({ length: 512 }, () => randn(0, 1)));
 
-  const callWrapper = withLoading(setLoading);
+  const withLoadingWrapper = withLoading(setLoading);
   useEffect(() => {
     if(canvasRef.current) {
       canvasRef.current.width = IMAGE_SIZE;
@@ -274,9 +292,13 @@ function App() {
       if(canvas) {
         const data = canvas.toDataURL("image/png");
         setError(null);
-        return callWrapper(infer(data, nz ?? z))
+        return withLoadingWrapper(apiCall({ action: "infer", img: data, z: nz ?? z }))
           .then(res => {
-            setReconstructed({ src: res.img, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
+            if("error" in res) {
+              setError(res.error);
+            } else {
+              setReconstructed({ src: res.img, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
+            }
           }).catch(err => setError(String(err)));
       }
     }
@@ -284,11 +306,15 @@ function App() {
   const handleClear = () => drawerRef.current?.clear()
   const handleLoad = () => {
     setError(null);
-    callWrapper(example(z))
+    withLoadingWrapper(apiCall({ action: "example", z }))
       .then(res => {
-        setReal({ src: res.real, label: idx2cls[res.label], predicted: idx2cls[res.real_pred_label], predicted_proba: res.real_pred_proba })
-        setReconstructed({ src: res.reconstructed, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
-        drawerRef.current?.load(res.segmented)
+        if("error" in res) {
+          setError(res.error);
+        } else {
+          setReal({ src: res.real, label: idx2cls[res.label], predicted: idx2cls[res.real_pred_label], predicted_proba: res.real_pred_proba })
+          setReconstructed({ src: res.reconstructed, predicted: idx2cls[res.rec_pred_label], predicted_proba: res.rec_pred_proba })
+          drawerRef.current?.load(res.segmented)
+        }
       }).catch(err => setError(String(err)));
   }
 
@@ -353,7 +379,7 @@ function App() {
           }
         </div>
       </div>
-      {error && <div style={{ color: "red" }}>{error}</div>}
+      {error && <div style={{ color: "orange", fontWeight: "bolder" }}>{error}</div>}
       Latent vector:
       <div style={{ display: "flex", flexWrap: "wrap", width: IMAGE_SIZE }}>
         {Array.from({ length: z.length / 3 })
