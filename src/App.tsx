@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LinearProgress } from "./LinearProgress";
-// const SERVER = "http://localhost:45624"
-const SERVER = "https://crypto.desislav.dev:45123"
+// const SERVER = "http://localhost:45624/infer"
+const SERVER = "https://r13jn1ho1i.execute-api.eu-central-1.amazonaws.com/default/serverless-ec2"
 
 const IMAGE_SIZE = 512;
 type DrawMode = "pen" | "eraser" | "bucket";
@@ -187,16 +187,16 @@ function withCooldown<T extends any[], U>(f: (...args: T) => Promise<U>, cooldow
   }
 }
 
-const example = withCooldown((z: number[]) => fetch(`${SERVER}/example`, {
+const example = withCooldown((z: number[]) => fetch(`${SERVER}`, {
   method: "POST",
-  body: JSON.stringify({ z }),
+  body: JSON.stringify({ z, action: "example", }),
   headers: { "content-type": "application/json" }
 }).then(r => r.json()), 300);
 
 const infer = withCooldown((img: any, z: number[]) => {
-  return fetch(`${SERVER}/infer`, {
+  return fetch(SERVER, {
     method: "POST",
-    body: JSON.stringify({ img, z }),
+    body: JSON.stringify({ action: "infer", img, z }),
     headers: { "content-type": "application/json" }
   }).then(r => r.json())
 }, 300)
@@ -488,7 +488,7 @@ const Legend = () => {
 
 
 
-      ].map(({ color, label }) => <div style={{ display: "flex", gap: 5, alignItems: "center",flex: 1 }}>
+      ].map(({ color, label }) => <div style={{ display: "flex", gap: 5, alignItems: "center", flex: 1 }}>
         <div style={{ width: 20, height: 20, backgroundColor: color }} />
         <div>{label}</div>
       </div>)}
